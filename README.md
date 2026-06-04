@@ -100,7 +100,15 @@ python main.py
 
 # 📸 Screenshots
 
-> Add your project screenshots here 😈
+<p align="center">
+  <img src="Screenshot 2026-06-04 174822.png" width="900">
+  <br><br>
+  <img src="Screenshot 2026-06-04 174834.png" width="900">
+  <br><br>
+  <img src="Screenshot 2026-06-04 174847.png" width="900">
+  <br><br>
+  <img src="Screenshot 2026-06-04 174903.png" width="900">
+</p>
 
 ---
 
