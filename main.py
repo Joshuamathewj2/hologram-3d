@@ -2,112 +2,77 @@ import cv2
 import mediapipe as mp
 import pygame
 from pygame.locals import *
-
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
 import math
 import time
 
-# =========================================
-# MEDIAPIPE SETUP
-# =========================================
+pygame.init()
 
-mp_hands = mp.solutions.hands
+screen = (1400, 900)
 
-hands = mp_hands.Hands(
+pygame.display.set_mode(screen, DOUBLEBUF | OPENGL)
+
+pygame.display.set_caption("Gesture Hologram")
+
+gluPerspective(45, screen[0] / screen[1], 0.1, 50.0)
+
+glEnable(GL_DEPTH_TEST)
+
+cam = cv2.VideoCapture(0)
+
+mpHands = mp.solutions.hands
+
+hands = mpHands.Hands(
     max_num_hands=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7
 )
 
-# =========================================
-# PYGAME + OPENGL
-# =========================================
-
-pygame.init()
-
-display = (1400, 900)
-
-pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
-
-pygame.display.set_caption("Gesture Hologram AI PRO")
-
-gluPerspective(45, (display[0] / display[1]), 0.1, 50.0)
-
-glEnable(GL_DEPTH_TEST)
-
-# =========================================
-# CAMERA
-# =========================================
-
-cap = cv2.VideoCapture(0)
-
-# =========================================
-# VARIABLES
-# =========================================
-
-rotation_x = 0
-rotation_y = 0
+rotX = 0
+rotY = 0
 
 zoom = -8
 
-current_object = 0
+objIndex = 0
 
-last_swipe_time = time.time()
+lastSwipe = time.time()
 
-auto_rotate = False
+autoRotate = False
 
-rotation_speed = 0.5
+rotateSpeed = 0.5
 
-paused = False
-
-# =========================================
-# OBJECT NAMES
-# =========================================
-
-object_names = [
-    "CUBE",
-    "PYRAMID",
-    "SPHERE",
-    "DIAMOND",
-    "CYLINDER",
-    "DOUBLE PYRAMID",
-    "WIRE SPHERE",
-    "WIRE CUBE"
+names = [
+    "Cube",
+    "Pyramid",
+    "Sphere",
+    "Diamond",
+    "Cylinder",
+    "Double Pyramid",
+    "Wire Sphere",
+    "Wire Cube"
 ]
 
-# =========================================
-# DRAW TEXT
-# =========================================
+def text(x, y, msg):
 
-def draw_text(x, y, text):
+    font = pygame.font.SysFont("Arial", 24)
 
-    font = pygame.font.SysFont("Arial", 26, True)
+    surface = font.render(msg, True, (0, 255, 255))
 
-    text_surface = font.render(text, True, (0, 255, 255))
-
-    text_data = pygame.image.tostring(
-        text_surface,
-        "RGBA",
-        True
-    )
+    data = pygame.image.tostring(surface, "RGBA", True)
 
     glWindowPos2d(x, y)
 
     glDrawPixels(
-        text_surface.get_width(),
-        text_surface.get_height(),
+        surface.get_width(),
+        surface.get_height(),
         GL_RGBA,
         GL_UNSIGNED_BYTE,
-        text_data
+        data
     )
 
-# =========================================
-# OBJECTS
-# =========================================
-
-def draw_cube():
+def cube():
 
     glColor3f(0, 1, 1)
 
@@ -137,9 +102,7 @@ def draw_cube():
 
     glEnd()
 
-# =========================================
-
-def draw_pyramid():
+def pyramid():
 
     glColor3f(1, 0, 1)
 
@@ -164,19 +127,15 @@ def draw_pyramid():
 
     glEnd()
 
-# =========================================
-
-def draw_sphere():
+def sphere():
 
     glColor3f(0, 1, 0)
 
-    quadric = gluNewQuadric()
+    q = gluNewQuadric()
 
-    gluSphere(quadric, 1, 40, 40)
+    gluSphere(q, 1, 40, 40)
 
-# =========================================
-
-def draw_diamond():
+def diamond():
 
     glColor3f(1, 1, 0)
 
@@ -189,32 +148,28 @@ def draw_diamond():
         (0,0,-1)
     ]
 
-    connections = [
+    links = [
         (0,1),(0,3),(0,4),(0,5),
         (2,1),(2,3),(2,4),(2,5)
     ]
 
     glBegin(GL_LINES)
 
-    for c in connections:
-        for v in c:
+    for l in links:
+        for v in l:
             glVertex3fv(points[v])
 
     glEnd()
 
-# =========================================
-
-def draw_cylinder():
+def cylinder():
 
     glColor3f(0, 0.5, 1)
 
-    quadric = gluNewQuadric()
+    q = gluNewQuadric()
 
-    gluCylinder(quadric, 1, 1, 2, 32, 32)
+    gluCylinder(q, 1, 1, 2, 32, 32)
 
-# =========================================
-
-def draw_double_pyramid():
+def doublePyramid():
 
     glColor3f(1, 0, 0)
 
@@ -227,7 +182,7 @@ def draw_double_pyramid():
         (0,-1,0)
     ]
 
-    connections = [
+    lines = [
         (0,1),(0,2),(0,3),(0,4),
         (5,1),(5,2),(5,3),(5,4),
         (1,2),(2,3),(3,4),(4,1)
@@ -235,27 +190,23 @@ def draw_double_pyramid():
 
     glBegin(GL_LINES)
 
-    for c in connections:
-        for v in c:
+    for line in lines:
+        for v in line:
             glVertex3fv(points[v])
 
     glEnd()
 
-# =========================================
-
-def draw_wire_sphere():
+def wireSphere():
 
     glColor3f(1, 0.5, 0)
 
-    quadric = gluNewQuadric()
+    q = gluNewQuadric()
 
-    gluQuadricDrawStyle(quadric, GLU_LINE)
+    gluQuadricDrawStyle(q, GLU_LINE)
 
-    gluSphere(quadric, 1, 20, 20)
+    gluSphere(q, 1, 20, 20)
 
-# =========================================
-
-def draw_wire_cube():
+def wireCube():
 
     glColor3f(1, 1, 1)
 
@@ -285,197 +236,141 @@ def draw_wire_cube():
 
     glEnd()
 
-# =========================================
-# DRAW CURRENT OBJECT
-# =========================================
+def drawObj():
 
-def draw_object():
+    if objIndex == 0:
+        cube()
 
-    if current_object == 0:
-        draw_cube()
+    elif objIndex == 1:
+        pyramid()
 
-    elif current_object == 1:
-        draw_pyramid()
+    elif objIndex == 2:
+        sphere()
 
-    elif current_object == 2:
-        draw_sphere()
+    elif objIndex == 3:
+        diamond()
 
-    elif current_object == 3:
-        draw_diamond()
+    elif objIndex == 4:
+        cylinder()
 
-    elif current_object == 4:
-        draw_cylinder()
+    elif objIndex == 5:
+        doublePyramid()
 
-    elif current_object == 5:
-        draw_double_pyramid()
+    elif objIndex == 6:
+        wireSphere()
 
-    elif current_object == 6:
-        draw_wire_sphere()
-
-    elif current_object == 7:
-        draw_wire_cube()
-
-# =========================================
-# MAIN LOOP
-# =========================================
+    elif objIndex == 7:
+        wireCube()
 
 while True:
 
-    success, frame = cap.read()
+    ok, frame = cam.read()
 
-    if not success:
+    if not ok:
         break
 
     frame = cv2.flip(frame, 1)
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    results = hands.process(rgb)
+    result = hands.process(rgb)
 
-    if results.multi_hand_landmarks:
+    if result.multi_hand_landmarks:
 
-        for hand_landmarks in results.multi_hand_landmarks:
+        for hand in result.multi_hand_landmarks:
 
-            # Index Finger
-            ix = hand_landmarks.landmark[8].x
-            iy = hand_landmarks.landmark[8].y
+            ix = hand.landmark[8].x
+            iy = hand.landmark[8].y
 
-            # Thumb
-            tx = hand_landmarks.landmark[4].x
-            ty = hand_landmarks.landmark[4].y
+            tx = hand.landmark[4].x
+            ty = hand.landmark[4].y
 
-            # Wrist
-            wx = hand_landmarks.landmark[0].x
+            wx = hand.landmark[0].x
 
-            # =========================================
-            # ROTATION
-            # =========================================
+            rotX = iy * 360
+            rotY = ix * 360
 
-            if not paused:
-
-                rotation_x = iy * 360
-                rotation_y = ix * 360
-
-            # =========================================
-            # ZOOM
-            # =========================================
-
-            distance = math.sqrt(
+            dist = math.sqrt(
                 (tx - ix) ** 2 +
                 (ty - iy) ** 2
             )
 
-            zoom = -3 - (distance * 25)
+            zoom = -3 - (dist * 25)
 
-            # =========================================
-            # SWIPE
-            # =========================================
+            move = ix - wx
 
-            current_time = time.time()
+            now = time.time()
 
-            movement = ix - wx
+            if move > 0.20 and now - lastSwipe > 2:
 
-            # RIGHT SWIPE
-            if movement > 0.20 and current_time - last_swipe_time > 2:
+                objIndex += 1
 
-                current_object += 1
+                objIndex %= 8
 
-                if current_object > 7:
-                    current_object = 0
+                lastSwipe = now
 
-                last_swipe_time = current_time
+                print("next object")
 
-            # LEFT SWIPE
-            elif movement < -0.20 and current_time - last_swipe_time > 2:
+            elif move < -0.20 and now - lastSwipe > 2:
 
-                current_object -= 1
+                objIndex -= 1
 
-                if current_object < 0:
-                    current_object = 7
+                objIndex %= 8
 
-                last_swipe_time = current_time
+                lastSwipe = now
 
-            # =========================================
-            # AUTO ROTATE
-            # =========================================
+                print("previous object")
 
-            index_up = hand_landmarks.landmark[8].y
-            middle_up = hand_landmarks.landmark[12].y
-            ring_up = hand_landmarks.landmark[16].y
-            pinky_up = hand_landmarks.landmark[20].y
+            # open hand detection
 
-            if (
-                index_up < hand_landmarks.landmark[6].y and
-                middle_up < hand_landmarks.landmark[10].y and
-                ring_up < hand_landmarks.landmark[14].y and
-                pinky_up < hand_landmarks.landmark[18].y
-            ):
+            finger1 = hand.landmark[8].y < hand.landmark[6].y
+            finger2 = hand.landmark[12].y < hand.landmark[10].y
+            finger3 = hand.landmark[16].y < hand.landmark[14].y
+            finger4 = hand.landmark[20].y < hand.landmark[18].y
 
-                auto_rotate = True
+            if finger1 and finger2 and finger3 and finger4:
+
+                autoRotate = True
 
             else:
 
-                auto_rotate = False
-
-            # =========================================
-            # DRAW LANDMARKS
-            # =========================================
+                autoRotate = False
 
             mp.solutions.drawing_utils.draw_landmarks(
                 frame,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS
+                hand,
+                mpHands.HAND_CONNECTIONS
             )
-
-    # =========================================
-    # OPENGL
-    # =========================================
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
     glLoadIdentity()
 
-    gluPerspective(45, (display[0] / display[1]), 0.1, 50.0)
+    gluPerspective(45, screen[0] / screen[1], 0.1, 50.0)
 
     glTranslatef(0.0, 0.0, zoom)
 
-    # AUTO ROTATE
-    if auto_rotate:
+    if autoRotate:
+        rotY += rotateSpeed
 
-        rotation_y += rotation_speed
+    glRotatef(rotX, 1, 0, 0)
+    glRotatef(rotY, 0, 1, 0)
 
-    glRotatef(rotation_x, 1, 0, 0)
+    drawObj()
 
-    glRotatef(rotation_y, 0, 1, 0)
-
-    # DRAW OBJECT
-    draw_object()
-
-    # =========================================
-    # HUD
-    # =========================================
-
-    draw_text(20, 850, f"OBJECT : {object_names[current_object]}")
-
-    draw_text(20, 810, "MOVE HAND = ROTATE")
-
-    draw_text(20, 770, "PINCH = ZOOM")
-
-    draw_text(20, 730, "SWIPE = CHANGE OBJECT")
-
-    draw_text(20, 690, "OPEN PALM = AUTO ROTATE")
+    text(20, 850, f"Object : {names[objIndex]}")
+    text(20, 810, "Move Hand = Rotate")
+    text(20, 770, "Pinch = Zoom")
+    text(20, 730, "Swipe = Change Object")
+    text(20, 690, "Open Palm = Auto Rotate")
 
     pygame.display.flip()
 
     pygame.time.wait(10)
 
-    # =========================================
-    # CAMERA WINDOW
-    # =========================================
-
     cv2.putText(
         frame,
-        "Gesture Hologram AI PRO",
+        "Gesture Hologram",
         (20, 40),
         cv2.FONT_HERSHEY_SIMPLEX,
         1,
@@ -485,18 +380,10 @@ while True:
 
     cv2.imshow("Hand Tracking", frame)
 
-    # =========================================
-    # EXIT
-    # =========================================
-
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# =========================================
-# CLEANUP
-# =========================================
-
-cap.release()
+cam.release()
 
 cv2.destroyAllWindows()
 
