@@ -140,7 +140,11 @@ def main() -> int:
             frame, "GestureHologramAI [Q=quit  F1=debug]",
             (16, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2
         )
-        cv2.imshow("Hand Tracking", frame)
+        
+        # Resize preview to free up screen real estate for the hologram
+        preview_frame = cv2.resize(frame, (480, 270))
+        cv2.imshow("Hand Tracking", preview_frame)
+        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             running = False
 
