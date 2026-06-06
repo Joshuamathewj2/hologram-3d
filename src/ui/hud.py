@@ -57,61 +57,55 @@ class HUD:
     def render(self, state: AppState, obj_name: str) -> None:
         self._ensure_fonts()
 
-        # ── Basic info ────────────────────────────────────────────────────────
-        self._draw_text(20, self._h - 50,  f"Object : {obj_name}", (0, 255, 255))
-        self._draw_text(20, self._h - 90,  "Move Hand = Rotate",   (180, 180, 180))
-        self._draw_text(20, self._h - 125, "Pinch = Zoom",         (180, 180, 180))
-        self._draw_text(20, self._h - 160, "Swipe = Switch Object",(180, 180, 180))
-        self._draw_text(20, self._h - 195, "Open Palm = Auto-Rotate",(180,180,180))
-        self._draw_text(20, self._h - 230, "F1 = Debug Overlay",   (100, 100, 100))
-
-        # ── Gesture state badge ───────────────────────────────────────────────
-        state_name  = state.gesture_state.name
-        sc = _STATE_COLORS.get(state.gesture_state, (1,1,1))
+        # ── Gesture state badge (Always visible in top right) ──────────────────
+        state_name = state.gesture_state.name
+        # Only draw badge if it's an active gesture (optional, but requested "may remain")
+        # I'll keep it as a gesture indicator for all states to show the live state.
+        sc = _STATE_COLORS.get(state.gesture_state, (1, 1, 1))
         col = (int(sc[0]*255), int(sc[1]*255), int(sc[2]*255))
         self._draw_text(self._w - 220, self._h - 50, f"[ {state_name} ]", col)
 
-        # ── Swipe flash ───────────────────────────────────────────────────────
-        if time.time() < state.swipe_flash_until:
-            arrow = ">>> SWIPE RIGHT >>>" if state.last_swipe_direction == "RIGHT" \
-                    else "<<< SWIPE LEFT <<<"
-            self._draw_large(self._w // 2 - 160, self._h // 2, arrow, (0, 255, 80))
-
-        # ── Debug overlay ─────────────────────────────────────────────────────
+        # ── Debug overlay (Toggled via F1) ────────────────────────────────────
         if state.debug_overlay:
-            self._render_debug(state)
+            self._render_debug(state, obj_name)
 
     # ------------------------------------------------------------------
     # Debug
     # ------------------------------------------------------------------
 
-    def _render_debug(self, state: AppState) -> None:
+    def _render_debug(self, state: AppState, obj_name: str) -> None:
         x = 20
-        y = 380
         step = 28
 
         vis = state.hand_visibility
         vc = _VIS_COLORS.get(vis, (1,1,1))
         vis_col = (int(vc[0]*255), int(vc[1]*255), int(vc[2]*255))
+        is_visible = vis in (HandVisibility.VISIBLE, HandVisibility.GRACE)
+        
+        frame_time_ms = (1000.0 / state.fps) if state.fps > 0 else 0.0
 
         rows = [
             (f"FPS          : {state.fps:.1f}",         (200, 200, 200)),
-            (f"Gesture      : {state.gesture_state.name}", (180, 240, 180)),
-            (f"Hand Vis     : {vis.name}",               vis_col),
+            (f"State        : {state.gesture_state.name}", (180, 240, 180)),
+            (f"Object       : {obj_name}",               (200, 255, 200)),
+            (f"Hand Visible : {is_visible}",             vis_col),
             (f"Swipe Vel    : {state.swipe_velocity:.3f}", (200, 200, 200)),
             (f"Pinch Dist   : {state.hand.pinch_dist:.3f}", (200, 200, 200)),
-            (f"Pinch Active : {state.pinch_active}",     (200, 200, 200)),
-            (f"Hand Conf    : {state.hand.hand_confidence:.2f}", (200, 200, 200)),
+            (f"Confidence   : {state.hand.hand_confidence:.2f}", (200, 200, 200)),
+            (f"Raw idx      : ({state.hand.raw_index_x:.3f}, {state.hand.raw_index_y:.3f})", (200,140,140)),
             (f"Filtered idx : ({state.hand.index_x:.3f}, {state.hand.index_y:.3f})", (100,220,255)),
-            (f"Raw      idx : ({state.hand.raw_index_x:.3f}, {state.hand.raw_index_y:.3f})", (200,140,140)),
-            (f"Object       : {state.obj_index}",        (200, 200, 200)),
+            (f"Frame Time   : {frame_time_ms:.1f} ms",   (200, 200, 200)),
         ]
 
+        # Draw panel from top-down
+        start_y = self._h - 50
+        
         # Background panel
-        self._draw_debug_bg(x - 5, y - 10, 300, len(rows) * step + 20)
+        self._draw_debug_bg(x - 5, start_y - len(rows)*step - 5, 410, len(rows) * step + 20)
 
         for i, (text, color) in enumerate(rows):
-            self._draw_small(x, y + i * step, text, color)
+            # Draw top-down. The top item is at (start_y - step), next is below it.
+            self._draw_small(x, start_y - i * step, text, color)
 
     # ------------------------------------------------------------------
     # Internals
@@ -134,39 +128,81 @@ class HUD:
 
     def _blit(self, font, x: int, y: int, msg: str, color) -> None:
         surface = font.render(msg, True, color)
-        data    = pygame.image.tostring(surface, "RGBA", True)
-        glWindowPos2d(x, y)
-        glDrawPixels(
-            surface.get_width(),
-            surface.get_height(),
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
-            data,
-        )
-
-    def _draw_debug_bg(self, x, y, w, h) -> None:
-        """Semi-transparent dark panel behind the debug text."""
-        # Draw a filled quad using immediate mode (acceptable for a 2D overlay)
-        glPushMatrix()
-        glLoadIdentity()
+        # tostring with "RGBA", True -> image is flipped vertically in raw buffer
+        # This makes it natively upright for OpenGL which has origin at bottom-left
+        data = pygame.image.tostring(surface, "RGBA", True)
+        w, h = surface.get_width(), surface.get_height()
+        
+        tex = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
+        
+        glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT)
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_TEXTURE_2D)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
         glOrtho(0, self._w, 0, self._h, -1, 1)
+        
         glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glTranslatef(x, y, 0)
+        
+        glColor4f(1.0, 1.0, 1.0, 1.0)
+        glBegin(GL_QUADS)
+        # Normal texture coordinates:
+        # Texture bottom-left (0,0) -> Quad bottom-left (0,0)
+        glTexCoord2f(0, 0); glVertex2f(0, 0)
+        # Texture bottom-right (1,0) -> Quad bottom-right (w,0)
+        glTexCoord2f(1, 0); glVertex2f(w, 0)
+        # Texture top-right (1,1) -> Quad top-right (w,h)
+        glTexCoord2f(1, 1); glVertex2f(w, h)
+        # Texture top-left (0,1) -> Quad top-left (0,h)
+        glTexCoord2f(0, 1); glVertex2f(0, h)
+        glEnd()
+        
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        
+        glBindTexture(GL_TEXTURE_2D, 0)
+        glDeleteTextures(1, [tex])
+        glPopAttrib()
 
+    def _draw_debug_bg(self, x, y, w, h) -> None:
+        """Semi-transparent dark panel behind the debug text."""
+        glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT)
+        glDisable(GL_DEPTH_TEST)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glColor4f(0.0, 0.0, 0.0, 0.65)
+
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self._w, 0, self._h, -1, 1)
+        
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glColor4f(0.0, 0.0, 0.0, 0.85)
         glBegin(GL_QUADS)
         glVertex2f(x,     y)
         glVertex2f(x + w, y)
         glVertex2f(x + w, y + h)
         glVertex2f(x,     y + h)
         glEnd()
-        glDisable(GL_BLEND)
-
+        
+        glPopMatrix()
         glMatrixMode(GL_PROJECTION)
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
-        glPopMatrix()
+        glPopAttrib()

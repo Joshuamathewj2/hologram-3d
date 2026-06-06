@@ -66,10 +66,6 @@ class HologramRenderer:
     def render(self, state: AppState, dt: float) -> None:
         """
         Render one frame.  dt = elapsed seconds since last frame.
-
-        Auto-rotation is time-based:
-            rot_y += speed_deg_per_sec * dt
-        So it behaves identically at 30, 60, 120 fps.
         """
         # ── Update rotation ──────────────────────────────────────────────────
         if state.auto_rotate and state.gesture_state == GestureState.OPEN_PALM:
@@ -83,11 +79,17 @@ class HologramRenderer:
 
         # ── OpenGL scene ─────────────────────────────────────────────────────
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+        # Setup projection correctly
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(self._fov, self._w / self._h, self._near, self._far)
+        
+        # Setup modelview correctly
+        glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
 
-        gluPerspective(self._fov, self._w / self._h, self._near, self._far)
         glTranslatef(0.0, 0.0, state.zoom)
-
         glRotatef(state.rot_x, 1, 0, 0)
         glRotatef(state.rot_y, 0, 1, 0)
 

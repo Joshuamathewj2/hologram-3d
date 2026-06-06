@@ -69,7 +69,7 @@ class AppState:
 
     # ── Object selection ────────────────────────────────────────────────────
     obj_index: int = 0
-    obj_count: int = 8
+    obj_count: int = 11
 
     # ── Rotation (degrees) ──────────────────────────────────────────────────
     rot_x: float = 0.0
