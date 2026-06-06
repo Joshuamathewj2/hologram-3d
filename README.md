@@ -1,4 +1,4 @@
-# 🤖 Gesture Hologram AI PRO
+#  Gesture Hologram AI PRO
 
 <p align="center">
   ✨ Control futuristic 3D holograms using only your hands ✨
@@ -101,13 +101,11 @@ python main.py
 # 📸 Screenshots
 
 <p align="center">
-  <img src="Screenshot 2026-06-04 174822.png" width="900">
+  <img src="Screenshot 2026-06-06 133419.png" width="900">
   <br><br>
-  <img src="Screenshot 2026-06-04 174834.png" width="900">
+  <img src="Screenshot 2026-06-06 133502.png" width="900">
   <br><br>
-  <img src="Screenshot 2026-06-04 174847.png" width="900">
-  <br><br>
-  <img src="Screenshot 2026-06-04 174903.png" width="900">
+  <img src="Screenshot 2026-06-06 133611.png" width="900">
 </p>
 
 ---
